@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image to PDF Converter</title>
+  <style>
+    /* Animated Background */
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(45deg, #ff9a9e, #fad0c4, #fbc2eb);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+      color: #333;
+    }
+
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Container Styling */
+    .container {
+      margin: 50px auto;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 10px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+      max-width: 600px;
+      text-align: center;
+    }
+
+    h1 {
+      color: #2c3e50;
+      font-size: 2rem;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+
+    input, button, select {
+      margin: 10px 0;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #dcdfe6;
+      width: 90%;
+      max-width: 300px;
+    }
+
+    /* Input Field */
+    input {
+      background-color: #f9fafc;
+      color: #333;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #3498db;
+      box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+    }
+
+    /* Button Styling */
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #1a73e8;
+      transform: scale(1.05);
+    }
+
+    /* Dropdown */
+    select {
+      background-color: #f9fafc;
+      color: #333;
+      border: 1px solid #dcdfe6;
+    }
+
+    /* Preview Section */
+    #preview {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background-color: #f7f9fc;
+      overflow: auto;
+      height: 400px;
+      max-width: 90%;
+      box-shadow: inset 0px 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    video, canvas {
+      margin-top: 10px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Image to PDF Converter</h1>
+    <input type="file" id="imageInput" accept="image/*" multiple>
+    <button id="cameraButton">Open Camera</button>
+    <video id="video" autoplay hidden></video>
+    <button id="captureButton" hidden>Capture Image</button>
+    <select id="pageSize">
+      <option value="a4">A4</option>
+      <option value="a5">A5</option>
+      <option value="letter">Letter</option>
+    </select>
+    <button id="convertButton">Convert to PDF</button>
+    <div id="preview"></div>
+    <button id="downloadButton" hidden>Download PDF</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const cameraButton = document.getElementById('cameraButton');
+    const video = document.getElementById('video');
+    const captureButton = document.getElementById('captureButton');
+    const convertButton = document.getElementById('convertButton');
+    const downloadButton = document.getElementById('downloadButton');
+    const preview = document.getElementById('preview');
+    const pageSizeSelect = document.getElementById('pageSize');
+    const { jsPDF } = window.jspdf;
+
+    let images = [];
+    let pdfBlob = null;
+
+    // Open Camera
+    cameraButton.addEventListener('click', async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      video.hidden = false;
+      captureButton.hidden = false;
+    });
+
+    // Capture Image from Camera
+    captureButton.addEventListener('click', () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      images.push(canvas.toDataURL('image/jpeg'));
+      preview.innerHTML += `<img src="${canvas.toDataURL('image/jpeg')}" alt="Captured Image" style="width: 100px; margin: 5px;">`;
+    });
+
+    // Handle File Input
+    imageInput.addEventListener('change', () => {
+      for (const file of imageInput.files) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          images.push(e.target.result);
+          preview.innerHTML += `<img src="${e.target.result}" alt="Uploaded Image" style="width: 100px; margin: 5px;">`;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Convert Images to PDF
+    convertButton.addEventListener('click', async () => {
+      if (images.length === 0) {
+        alert('Please add or capture at least one image.');
+        return;
+      }
+
+      const pdf = new jsPDF({ format: pageSizeSelect.value });
+      for (let i = 0; i < images.length; i++) {
+        if (i > 0) pdf.addPage();
+        const img = new Image();
+        img.src = images[i];
+        await new Promise((resolve) => {
+          img.onload = () => {
+            const imgWidth = pdf.internal.pageSize.getWidth();
+            const imgHeight = (img.height * imgWidth) / img.width;
+            pdf.addImage(img, 'JPEG', 0, 0, imgWidth, imgHeight);
+            resolve();
+          };
+        });
+      }
+
+      pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      preview.innerHTML = `<iframe src="${pdfUrl}" width="100%" height="400"></iframe>`;
+      downloadButton.hidden = false;
+    });
+
+    // Download PDF
+    downloadButton.addEventListener('click', () => {
+      const pdf = new jsPDF();
+      pdf.save('converted.pdf');
+    });
+  </script>
+</body>
+</html>
